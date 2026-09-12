@@ -4,10 +4,11 @@
 
 Test the core hypothesis as cheaply and diagnostically as possible before building a large synthetic-data generator or training a new diving-specific pose model.
 
-Experiment 001 has two distinct stages:
+Experiment 001 has three diagnostic stages before the main reconstruction ablation:
 
-1. **localize the failure layer**, and
-2. **test reconstruction only after localization has been controlled**.
+1. **localize the failure layer,**
+2. **test image-plane orientation sensitivity,**
+3. **test reconstruction only after localization and orientation effects are understood.**
 
 ## Main hypotheses
 
@@ -19,9 +20,19 @@ During extreme diving configurations, a conventional pose pipeline may lose the 
 
 A tracker or global-state estimator may retain the athlete and approximate flight path while articulated pose estimation collapses.
 
-### H3 — Sequence-level constraints can improve reconstruction
+### H3 — Pose models may depend strongly on conventional upright image orientation
 
-Once athlete localization is controlled, temporal, biomechanical, phase and physical information may recover a more coherent pose during critical failure windows.
+A normally recognizable human crop may become difficult for the same pose model after synthetic image rotation even though the underlying articulation has not changed.
+
+### H4 — Image-space canonicalization may recover part of the difficult-pose failure
+
+If a difficult diving crop is supplied with an oracle orientation and rotated into a more conventional image-plane orientation before pose inference, pose quality may improve.
+
+If it does not improve, orientation shift should be deprioritized relative to articulation, occlusion and other causes.
+
+### H5 — Sequence-level constraints can improve reconstruction
+
+Once athlete localization and orientation effects are controlled, temporal, biomechanical, phase and physical information may recover a more coherent pose during critical failure windows.
 
 ## Initial corpus
 
@@ -69,7 +80,7 @@ The exact model(s) will be selected after a reproducibility and licensing audit.
 
 At least one stronger accuracy-oriented model and one practical/fast model may be useful to determine whether a failure is architecture-specific or general.
 
-## Stage 1 — Diagnostic baseline controls
+## Stage 1 — Diagnostic localization controls
 
 Use the **same pose model** wherever possible so that input control, not model replacement, is the intervention.
 
@@ -127,9 +138,84 @@ Where a reliable mask is available, estimate simple global quantities such as:
 
 This tests whether global body state remains recoverable after articulated pose has collapsed.
 
-## Stage 2 — Reconstruction ablation
+## Stage 2 — Orientation robustness diagnostic
 
-Proceed only after Stage 1 has established how localization is controlled.
+This stage isolates image-plane orientation from articulation change.
+
+### O0a — Known-good crop, original orientation
+
+Select athlete crops for which the baseline produces a clearly usable pose in the original image orientation.
+
+These are the reference cases.
+
+### O0b — Same known-good crop under synthetic rotations
+
+Rotate the **athlete pixels** and crop by a predefined angle set while keeping the underlying human configuration identical.
+
+An initial angle set may include, subject to later protocol freeze:
+
+```text
+0°, 45°, 90°, 135°, 180°, 225°, 270°, 315°
+```
+
+or a denser set if computationally inexpensive.
+
+Transform predicted keypoints back into a common coordinate system before comparison.
+
+The central test is approximate rotation equivariance:
+
+```text
+f(Rθ I) ≈ Rθ f(I)
+```
+
+This stage contains no genuine diving pose change and therefore isolates orientation sensitivity.
+
+### O1a — Difficult diving crop, original orientation
+
+Use a crop from a critical failure interval after athlete localization has been controlled.
+
+### O1b — Same difficult crop with oracle image-space canonicalization
+
+Supply a manually or externally determined coarse body orientation and rotate the **pixels before pose inference** into a canonical image orientation.
+
+After inference, transform keypoints back to the original frame coordinates.
+
+Purpose:
+
+> Does perfect or near-perfect orientation information make the difficult pose materially easier for the same pose model?
+
+### O1c — Estimated-orientation canonicalization
+
+Attempt automatic orientation estimation only after O1b establishes that canonicalization itself is useful.
+
+This avoids conflating:
+
+```text
+canonicalization is ineffective
+```
+
+with:
+
+```text
+canonicalization would work, but orientation estimation was inaccurate
+```
+
+### Important non-equivalence
+
+Rotating pose coordinates after an already failed pose prediction is **not** the same experiment.
+
+The diagnostic requires transforming the visual input:
+
+```text
+image pixels
+→ rotation / canonicalization
+→ pose model
+→ inverse coordinate transform
+```
+
+## Stage 3 — Reconstruction ablation
+
+Proceed after Stages 1–2 have established how localization and orientation effects are controlled.
 
 ### B1 — Temporal pose reconstruction
 
@@ -164,7 +250,7 @@ Candidate priors include:
 
 ## Causal and offline reconstruction
 
-Where practical, report two sequence settings:
+Where practical, report two sequence settings.
 
 ### Causal / online
 
@@ -217,7 +303,11 @@ The skeleton remains human-like but is wrong in ways such as:
 - wrong global orientation,
 - implausible articulation.
 
-A clip may contain more than one failure type over time.
+### F4 — Orientation-sensitive pose failure
+
+The same or closely matched visual human configuration is estimated substantially worse at unusual image-plane orientations, or a difficult diving pose improves materially after oracle image-space canonicalization.
+
+F4 is a diagnostic mechanism label and may coexist with F1–F3.
 
 ## Failure timing
 
@@ -233,8 +323,6 @@ Record, where possible:
 
 Do not rely only on a single whole-video pose metric.
 
-Candidate metrics include:
-
 ### Athlete-retention metrics
 
 - athlete bbox / mask overlap where ground truth is available,
@@ -247,6 +335,29 @@ Candidate metrics include:
 - pose detections in background-only controls,
 - confidence of those detections,
 - distance from the removed athlete's true region.
+
+### Orientation metrics
+
+For O0b and related tests:
+
+- keypoint error after inverse rotation into a common coordinate system,
+- success / failure rate as a function of rotation angle,
+- confidence as a function of rotation angle,
+- catastrophic-failure rate as a function of rotation angle.
+
+Define a rotation-equivariance error of the form:
+
+```text
+E_rot(θ) = d( f(Rθ I), Rθ f(I) )
+```
+
+with an evaluation distance `d` chosen and frozen before final held-out evaluation.
+
+For O1b:
+
+- improvement from original difficult crop to oracle-canonicalized crop,
+- failure-class transition, e.g. F2 → usable structured pose,
+- sensitivity to coarse orientation error where later useful.
 
 ### Articulation metrics
 
@@ -302,7 +413,8 @@ A manually guessed location of a fully occluded joint should not be treated as e
 Only proceed to a large synthetic-data generator after Experiment 001 identifies specific residual failure modes that:
 
 1. survive the controlled localization diagnostics,
-2. are not adequately solved by temporal / biomechanical reconstruction,
-3. and plausibly require targeted additional training data.
+2. survive or are characterized by the orientation diagnostics,
+3. are not adequately solved by temporal / biomechanical reconstruction,
+4. and plausibly require targeted additional training data.
 
-See [`baseline_protocol.md`](baseline_protocol.md) for the baseline freeze and implementation-facing details.
+See [`baseline_protocol.md`](baseline_protocol.md) for the protocol freeze and implementation-facing details.

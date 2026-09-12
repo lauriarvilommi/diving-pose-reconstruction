@@ -9,8 +9,9 @@ Conventional pose pipelines may perform adequately while the diver remains in fa
 Preliminary tests suggest that the failure may be **hierarchical and catastrophic**:
 
 - the system may first lose the athlete as a coherent target,
-- it may then place joints on unrelated background structures,
-- or it may retain the approximate athlete trajectory while the articulated pose degenerates into unstable joint-position noise.
+- it may place joints on unrelated background structures,
+- it may retain the approximate athlete trajectory while articulated pose degenerates into unstable joint-position noise,
+- and part of the failure may arise because the same human appearance is presented at an image-plane orientation far outside the model's conventional upright prior.
 
 The project therefore does not treat all of these outcomes as the same "pose error".
 
@@ -24,6 +25,8 @@ camera / shot state
 athlete retention
         ↓
 global body state
+        ↓
+orientation robustness / canonicalization
         ↓
 articulated pose
         ↓
@@ -43,7 +46,27 @@ A conceptual latent state may eventually contain quantities such as:
 
 Each video frame is an incomplete and sometimes highly ambiguous observation of that state.
 
-## 3. Why camera state matters
+## 3. Why image-space orientation must be tested separately
+
+An earlier exploratory approach transformed pose coordinates mathematically after or outside the visual recognition step. That does not answer whether the pose model can interpret the underlying athlete pixels when the athlete is inverted or strongly rotated.
+
+The new protocol therefore distinguishes:
+
+```text
+pose-coordinate transformation
+```
+
+from
+
+```text
+image-space canonicalization
+```
+
+The orientation diagnostic rotates the **athlete pixels before pose inference** and then transforms the prediction back into the original coordinate system for evaluation.
+
+This allows a direct test of whether orientation distribution shift is a major cause of failure.
+
+## 4. Why camera state matters
 
 Broadcast footage may contain:
 
@@ -59,7 +82,7 @@ Likewise, fixed 3D segment lengths do not imply constant observed 2D segment len
 
 The project will therefore keep physical and geometric priors **projection-aware**.
 
-## 4. Research strategy
+## 5. Research strategy
 
 The project will proceed incrementally.
 
@@ -96,7 +119,21 @@ The core diagnostic controls are:
 - background-only negative control,
 - temporally tracked athlete crop.
 
-### Phase C — Tracker-only and global-state baselines
+### Phase C — Orientation robustness diagnostics
+
+Test rotational equivariance independently of diving articulation.
+
+First use **known-good athlete crops** and rotate their pixels synthetically over a predefined angle set. This isolates image-plane orientation from changes in body configuration.
+
+Then use difficult diving crops and compare:
+
+- original difficult crop,
+- oracle-canonicalized crop,
+- and only later, estimated-orientation canonicalization.
+
+If oracle canonicalization does not improve difficult poses, orientation estimation should not be treated as the main bottleneck.
+
+### Phase D — Tracker-only and global-state baselines
 
 Test whether the athlete can be retained as an object through the same intervals in which pose estimation collapses.
 
@@ -109,16 +146,16 @@ Where suitable masks are available, evaluate simple global descriptors such as:
 
 This phase deliberately avoids solving articulated pose.
 
-### Phase D — Training-free temporal pose reconstruction
+### Phase E — Training-free temporal pose reconstruction
 
-Once localization is controlled, test whether sequence-level reconstruction can recover missing or unstable joints.
+Once localization and orientation effects are understood, test whether sequence-level reconstruction can recover missing or unstable joints.
 
 Separate:
 
 - causal / online reconstruction,
 - offline smoothing that may use future frames.
 
-### Phase E — Projection-aware biomechanical constraints
+### Phase F — Projection-aware biomechanical constraints
 
 Add soft constraints for:
 
@@ -130,23 +167,23 @@ Add soft constraints for:
 
 Do not use constant image-plane segment length as a physical invariant.
 
-### Phase F — Dive-phase priors
+### Phase G — Dive-phase priors
 
 Use approximate phase information and sport-specific pose/timing ranges to reduce the set of plausible reconstructions.
 
-### Phase G — Camera-aware flight physics
+### Phase H — Camera-aware flight physics
 
 Add selected physical constraints during airborne motion, initially without full muscle or contact-force simulation.
 
 World-space physics must be separated from camera-induced image motion.
 
-### Phase H — Synthetic data, only if justified
+### Phase I — Synthetic data, only if justified
 
 Build a synthetic sequence generator only if earlier experiments show that additional targeted training data are likely to help.
 
 Synthetic generation should focus on measured residual failure modes rather than uniformly sampling the entire anatomically possible pose space.
 
-## 5. Evaluation philosophy
+## 6. Evaluation philosophy
 
 Whole-video averages can hide the most important errors.
 
@@ -165,21 +202,22 @@ The evaluation must also distinguish:
 
 - loss of the athlete,
 - retention of the athlete but loss of articulation,
+- orientation-sensitive failure,
 - and a structured but semantically wrong skeleton.
 
-## 6. Split philosophy
+## 7. Split philosophy
 
 A random dive-level split may leak background, venue, broadcaster, camera and athlete-specific cues into both development and evaluation sets.
 
 Where metadata allows, the held-out evaluation set should therefore be grouped by source/session/camera environment and, where practical, athlete identity.
 
-## 7. Pre-data protocol freeze
+## 8. Pre-data protocol freeze
 
-The baseline protocol, failure taxonomy, primary metrics and split principles should be documented **before the requested datasets are inspected in detail**.
+The baseline protocol, orientation diagnostic, failure taxonomy, primary metrics and split principles should be documented **before the requested datasets are inspected in detail**.
 
 This reduces the risk of changing the experiment after seeing which measurements make the proposed method look favorable.
 
-## 8. Open-science boundary
+## 9. Open-science boundary
 
 The project aims to make methods, code, configurations, experiment definitions, and permitted results public.
 

@@ -2,11 +2,21 @@
 
 ## Primary problem
 
-Can competitive-diving pose reconstruction remain reliable during frames in which conventional human-pose pipelines lose either the athlete, the athlete's global body state, or the articulated pose?
+Can competitive-diving pose reconstruction remain reliable during frames in which conventional human-pose pipelines lose either the athlete, the athlete's global body state, the orientation interpretation, or the articulated pose?
 
 The project focuses specifically on difficult configurations such as deep take-off flexion, inversion, tuck/pike positions, twisting, self-occlusion, motion blur, opening, and water entry.
 
-A central methodological decision is to **separate target retention from pose estimation** rather than treating every failure as a generic keypoint error.
+A central methodological decision is to separate:
+
+```text
+target retention
+from
+orientation robustness
+from
+articulated-pose reconstruction
+```
+
+rather than treating every failure as generic keypoint error.
 
 ## RQ1 — Failure hierarchy
 
@@ -17,9 +27,10 @@ Distinguish at least:
 - person detection failure,
 - target-identity loss,
 - global-state retention with articulation collapse,
+- orientation-prior failure,
 - and structured but semantically incorrect pose.
 
-This determines whether the main bottleneck is localization, tracking, pose recognition, or later reconstruction.
+This determines whether the main bottleneck is localization, tracking, orientation robustness, pose recognition, or later reconstruction.
 
 ## RQ2 — Controlled localization interventions
 
@@ -41,11 +52,52 @@ This is intended to distinguish a true extreme-pose failure from a person-detect
 
 The background-only control is specifically intended to test whether rails, advertising boards, architecture or other structures trigger false pose hypotheses.
 
-## RQ4 — Temporal athlete retention
+## RQ4 — Rotational equivariance
+
+**How strongly does a pose model depend on the conventional upright image orientation of the human body?**
+
+Use a known-good athlete crop and rotate the *pixels* synthetically while preserving the same human configuration.
+
+For image rotation \(R_\theta\) and pose estimator \(f\), test whether the model approximately satisfies:
+
+```text
+f(Rθ I) ≈ Rθ f(I)
+```
+
+after transforming predictions into a common coordinate system.
+
+The purpose is to isolate orientation shift from:
+
+- articulation change,
+- motion blur,
+- self-occlusion,
+- tracking failure,
+- and dive-phase change.
+
+## RQ5 — Oracle orientation canonicalization
+
+**If a difficult diving crop is rotated into a canonical image-plane orientation using an externally supplied orientation, does articulated-pose estimation improve?**
+
+Compare:
+
+- difficult crop in its original image orientation,
+- the same pixels rotated using oracle orientation,
+- and later, the same operation using estimated orientation.
+
+This separates two questions:
+
+1. can the pose model work after image-space canonicalization?
+2. can an automatic system estimate a useful canonicalization angle?
+
+The first question must be tested before the second.
+
+## RQ6 — Temporal athlete retention
 
 **Can a tracker retain the same athlete through the critical interval even when articulated pose estimation fails?**
 
-This test intentionally asks less than pose estimation. Success would show that:
+This test intentionally asks less than pose estimation.
+
+Success would show that:
 
 ```text
 athlete tracking succeeds
@@ -55,9 +107,9 @@ articulated pose recognition fails
 
 and would justify decoupling the two tasks.
 
-## RQ5 — Temporal articulated reconstruction
+## RQ7 — Temporal articulated reconstruction
 
-**Once athlete localization is controlled, can temporal information recover a coherent pose during short intervals of severe ambiguity or missing visual evidence?**
+**Once athlete localization and orientation effects are controlled, can temporal information recover a coherent pose during short intervals of severe ambiguity or missing visual evidence?**
 
 Two modes should eventually be distinguished:
 
@@ -66,7 +118,7 @@ Two modes should eventually be distinguished:
 
 For post-performance coaching analysis, offline smoothing is a valid and potentially stronger setting.
 
-## RQ6 — Projection-aware biomechanical constraints
+## RQ8 — Projection-aware biomechanical constraints
 
 **How much additional improvement comes from body geometry and biomechanical constraints once camera projection is accounted for?**
 
@@ -82,7 +134,7 @@ The project must **not** assume constant observed 2D segment length, because 3D 
 
 Constraints should initially be soft penalties rather than hard rules.
 
-## RQ7 — Diving-phase priors
+## RQ9 — Diving-phase priors
 
 **Does knowledge of the current diving phase reduce pose ambiguity?**
 
@@ -100,7 +152,7 @@ Possible phase information includes:
 
 Phase priors should be represented as ranges or distributions rather than a single idealized trajectory.
 
-## RQ8 — Camera-aware flight physics
+## RQ10 — Camera-aware flight physics
 
 **Can lightweight physical constraints improve airborne trajectory and orientation reconstruction after camera motion has been separated from athlete motion?**
 
@@ -113,7 +165,7 @@ Initial physical priors may include:
 
 Broadcast-image pixel trajectories must not be treated as directly ballistic when the camera pans, tilts or zooms.
 
-## RQ9 — Failure onset and recovery
+## RQ11 — Failure onset and recovery
 
 **When does catastrophic failure begin, how long does it persist, and does the baseline recover the correct athlete and pose before water entry?**
 
@@ -130,7 +182,9 @@ The first phase succeeds scientifically if it can:
 
 1. localize the dominant failure layer,
 2. quantify catastrophic target-loss and articulation-collapse events,
-3. determine which controlled interventions remove which failures,
-4. and then test the reconstruction ablation without changing the evaluation rules after the data have been inspected.
+3. quantify orientation sensitivity independently of articulation change,
+4. determine whether image-space canonicalization removes any part of the extreme-pose failure,
+5. determine which controlled interventions remove which failures,
+6. and then test the reconstruction ablation without changing the evaluation rules after the data have been inspected.
 
-A negative result is also useful. If a layer adds no measurable improvement, later work should not assume that layer is necessary.
+A negative result is also useful. If oracle image-space canonicalization does not help difficult diving poses, orientation shift can be deprioritized relative to articulation, occlusion and other mechanisms.

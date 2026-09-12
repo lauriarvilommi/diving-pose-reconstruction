@@ -1,4 +1,4 @@
-# Baseline Protocol v0.1
+# Baseline Protocol v0.2
 
 **Status:** Pre-data freeze candidate  
 **Experiment:** Experiment 001 — Critical-Frame Failure Localization and Pose Reconstruction
@@ -7,16 +7,17 @@
 
 This protocol defines the baseline experiment **before detailed inspection of the requested diving datasets**.
 
-Its primary purpose is not to maximize pose accuracy. It is to answer a more basic question:
+Its primary purpose is not to maximize pose accuracy. It is to answer:
 
-> **Where does a conventional human-pose pipeline first lose the diving motion?**
+> **Where does a conventional human-pose pipeline first lose the diving motion, and how much of that failure is caused by image-plane orientation rather than by target loss, articulation or occlusion?**
 
 Preliminary tests indicate that failure may be catastrophic. Once the diver enters highly inverted, compact or blurred configurations, the system may:
 
 - fail to retain the athlete as the same target,
 - hallucinate joints on background structures,
 - retain only the approximate athlete trajectory,
-- or produce a structured but semantically incorrect skeleton.
+- produce a structured but semantically incorrect skeleton,
+- or fail because a normally recognizable human appearance is presented at an image-plane orientation outside the model's conventional upright prior.
 
 The protocol therefore separates:
 
@@ -26,6 +27,8 @@ camera / shot state
 athlete retention
         ↓
 global body state
+        ↓
+orientation robustness
         ↓
 articulated pose
 ```
@@ -39,7 +42,8 @@ before testing later sequence reconstruction.
 Before detailed dataset inspection, freeze as far as practical:
 
 - the failure hierarchy,
-- diagnostic baseline variants,
+- localization diagnostic variants,
+- orientation diagnostic variants,
 - primary failure metrics,
 - critical-window concept,
 - split principles,
@@ -116,11 +120,20 @@ gt_annotation_confidence
 gt_left_right_ambiguity
 ```
 
+For orientation diagnostics additionally store:
+
+```text
+input_rotation_degrees
+canonicalization_source    # none / oracle / estimated
+inverse_transform
+reference_pose_id
+```
+
 Do not place restricted source data in the public repository.
 
 ---
 
-## 5. Diagnostic baseline matrix
+## 5. Diagnostic localization matrix
 
 ### B0a — Whole-frame detector + pose
 
@@ -155,7 +168,7 @@ B0a fails + B0b succeeds
 → localization / target retention is a major failure source
 
 B0a fails + B0b fails
-→ articulated extreme-pose recognition remains a major failure source
+→ articulated extreme-pose recognition or orientation sensitivity remains a major failure source
 ```
 
 The oracle box is a diagnostic intervention, not a proposed production solution.
@@ -256,7 +269,207 @@ This deliberately asks a simpler question than pose estimation:
 
 ---
 
-## 6. Failure taxonomy
+## 6. Orientation robustness diagnostic
+
+### 6.1 Motivation
+
+A previous exploratory approach transformed pose coordinates mathematically, but that does not determine whether the pose network can interpret the athlete pixels at an unusual orientation.
+
+The relevant comparison is:
+
+```text
+post-hoc coordinate rotation
+```
+
+versus:
+
+```text
+image pixels
+→ image-space rotation / canonicalization
+→ pose model
+→ inverse coordinate transform
+```
+
+The latter is the diagnostic used here.
+
+---
+
+### O0a — Known-good crop, original orientation
+
+Select athlete crops where the baseline pose is clearly usable in the original image orientation.
+
+These are reference cases for orientation-only manipulation.
+
+---
+
+### O0b — Same known-good crop under synthetic rotations
+
+Rotate the **same athlete pixels** synthetically while keeping the underlying human articulation unchanged.
+
+A candidate initial rotation set is:
+
+```text
+0°, 45°, 90°, 135°, 180°, 225°, 270°, 315°
+```
+
+A denser grid may be added if inexpensive, but the final grid must be recorded before held-out evaluation.
+
+The operation should include the entire athlete crop and enough padding to avoid clipping body parts after rotation.
+
+After inference, transform predicted keypoints back into the original reference coordinate system.
+
+The core equivariance test is:
+
+```text
+f(Rθ I) ≈ Rθ f(I)
+```
+
+where:
+
+- `I` is the known-good crop,
+- `Rθ` is the image-space rotation,
+- `f` is the pose estimator.
+
+This test changes orientation only; it does **not** introduce a real change in:
+
+- articulation,
+- motion blur,
+- self-occlusion,
+- athlete identity,
+- dive phase.
+
+---
+
+### O1a — Difficult diving crop, original orientation
+
+Use a difficult crop from a critical failure interval after athlete localization is controlled.
+
+---
+
+### O1b — Difficult crop with oracle canonicalization
+
+Supply a manually or externally determined coarse body orientation and rotate the **pixels before pose inference** toward a canonical image-plane orientation.
+
+After inference, transform predicted keypoints back into the original frame coordinates.
+
+Purpose:
+
+> Does essentially correct orientation information make the same difficult athlete pixels materially easier for the pose estimator?
+
+If O1b fails similarly to O1a, orientation shift alone is unlikely to explain the difficult-pose failure.
+
+---
+
+### O1c — Estimated-orientation canonicalization
+
+Attempt automatic orientation estimation only after O1b demonstrates that oracle canonicalization is beneficial.
+
+This preserves a clean dependency:
+
+```text
+first:  does canonicalization help?
+then:   can orientation be estimated well enough?
+```
+
+Do not build a complex orientation estimator merely to discover later that perfect orientation would not have helped.
+
+---
+
+### 6.2 Canonical orientation definition
+
+Do not assume in advance that one exact anatomical vector is always observable.
+
+Candidate canonical axes may include:
+
+- coarse torso axis,
+- head-to-pelvis axis when available,
+- principal foreground axis,
+- or another robust global-body orientation descriptor.
+
+The protocol should record which definition is used.
+
+For tightly tucked or twisted poses, global image-plane orientation can itself be ambiguous. Oracle labels should therefore allow an uncertainty / ambiguity field.
+
+---
+
+### 6.3 Rotation-equivariance metrics
+
+For known-good crops, define a rotation-equivariance error:
+
+```text
+E_rot(θ) = d( f(Rθ I), Rθ f(I) )
+```
+
+after mapping both predictions into the same coordinate frame.
+
+Candidate reporting:
+
+- error versus rotation angle,
+- successful-pose rate versus angle,
+- confidence versus angle,
+- F0–F3 failure rates versus angle.
+
+The exact distance metric `d` and normalization must be frozen before final held-out evaluation.
+
+---
+
+### 6.4 Canonicalization gain
+
+For difficult crops, compare O1a and O1b.
+
+Candidate quantity:
+
+```text
+G_canon = error_original - error_oracle_canonicalized
+```
+
+where positive `G_canon` indicates improvement.
+
+If full pose ground truth is unavailable, also report transitions in failure class, for example:
+
+```text
+F2 articulation collapse
+→
+F3 structured pose
+```
+
+or
+
+```text
+catastrophic failure
+→
+usable pose
+```
+
+according to predeclared qualitative / structural criteria.
+
+---
+
+### 6.5 Orientation estimation is not yet part of the core model
+
+O1c is conditional on O1b.
+
+The baseline protocol should therefore not assume that orientation canonicalization will become part of the final system.
+
+Possible outcomes include:
+
+```text
+O0b fails strongly, O1b helps
+→ orientation prior is a real bottleneck
+
+O0b fails strongly, O1b does not help difficult poses
+→ orientation sensitivity exists, but difficult-pose failure is dominated by other mechanisms
+
+O0b is stable, O1b does not help
+→ orientation shift is probably not a major issue
+
+O1b helps strongly
+→ automatic orientation estimation becomes a justified next problem
+```
+
+---
+
+## 7. Failure taxonomy
 
 A failure interval may transition between categories.
 
@@ -296,9 +509,15 @@ Examples:
 - physically implausible articulation,
 - systematic upright-human reinterpretation of an inverted diver.
 
+### F4 — Orientation-sensitive failure mechanism
+
+Use F4 as an additional mechanism label when controlled orientation experiments show that image-plane rotation itself substantially changes pose quality.
+
+F4 may coexist with F0–F3; it does not replace them.
+
 ---
 
-## 7. Failure timing
+## 8. Failure timing
 
 For each clip / critical interval, record where possible:
 
@@ -322,7 +541,7 @@ This may reveal whether the baseline fails systematically at the same semantic t
 
 ---
 
-## 8. Critical event landmarks
+## 9. Critical event landmarks
 
 Initial event labels:
 
@@ -366,35 +585,35 @@ These labels must later receive dataset-specific annotation rules without changi
 
 ---
 
-## 9. Athlete-retention metrics
+## 10. Athlete-retention metrics
 
 Where athlete bbox / mask ground truth exists, candidate metrics include:
 
-### 9.1 Bounding-box overlap
+### 10.1 Bounding-box overlap
 
 Intersection over Union between predicted tracked athlete region and true athlete region.
 
-### 9.2 Normalized centroid error
+### 10.2 Normalized centroid error
 
 Distance between predicted pose / track centroid and athlete centroid, normalized by an athlete-size or frame-size scale.
 
-### 9.3 Keypoints-inside-foreground fraction
+### 10.3 Keypoints-inside-foreground fraction
 
 Fraction of predicted keypoints that fall inside or within a small tolerance of the true athlete foreground.
 
 This is particularly useful for detecting joint explosions into background structures.
 
-### 9.4 Target-loss event rate
+### 10.4 Target-loss event rate
 
 Fraction of clips / critical windows containing at least one F1 event.
 
-### 9.5 Retention duration
+### 10.5 Retention duration
 
 Number of frames the correct athlete identity remains retained after P0.
 
 ---
 
-## 10. Background-hallucination metrics
+## 11. Background-hallucination metrics
 
 For B0d:
 
@@ -409,7 +628,7 @@ A model should ideally produce **no confident athlete pose** in the background-o
 
 ---
 
-## 11. Articulation metrics
+## 12. Articulation metrics
 
 Where trustworthy ground-truth keypoints exist:
 
@@ -425,19 +644,20 @@ Always stratify by:
 - visibility,
 - occlusion,
 - critical phase,
-- and annotation confidence.
+- annotation confidence,
+- and orientation condition where relevant.
 
 ---
 
-## 12. Structural and temporal diagnostics
+## 13. Structural and temporal diagnostics
 
-### 12.1 Pose explosion / temporal jump
+### 13.1 Pose explosion / temporal jump
 
 Measure large frame-to-frame changes in predicted joint configuration.
 
 Any threshold must be normalized appropriately and calibrated without using the held-out evaluation set.
 
-### 12.2 Segment geometry
+### 13.2 Segment geometry
 
 **Do not use constant observed 2D limb length as a physical invariant.**
 
@@ -450,7 +670,7 @@ For a true fixed-length 3D segment:
 
 Initial 2D diagnostics may still detect extreme discontinuities, but they must be interpreted as plausibility cues rather than direct physical constraints.
 
-### 12.3 Confidence versus plausibility
+### 13.3 Confidence versus plausibility
 
 Model confidence and pose plausibility are different quantities.
 
@@ -466,7 +686,7 @@ These are particularly important catastrophic failures.
 
 ---
 
-## 13. Camera / shot state
+## 14. Camera / shot state
 
 At minimum annotate or infer a coarse camera-state category:
 
@@ -486,13 +706,15 @@ Reason:
 
 Any flight-physics term must therefore be camera-aware or applied only where camera behavior is sufficiently controlled.
 
+Image rotation in the O0/O1 diagnostic is an intentional preprocessing intervention and must be recorded separately from natural camera rotation / shot behavior.
+
 ---
 
-## 14. Reconstruction ablation after localization control
+## 15. Reconstruction ablation after diagnostic control
 
 ### B1 — Temporal articulated reconstruction
 
-Use sequence information after athlete retention has been controlled.
+Use sequence information after athlete retention and orientation effects have been characterized.
 
 ### B2 — Projection-aware biomechanical constraints
 
@@ -519,7 +741,7 @@ Candidate soft priors:
 
 ---
 
-## 15. Causal versus offline sequence inference
+## 16. Causal versus offline sequence inference
 
 Report separately where feasible.
 
@@ -543,7 +765,7 @@ Future frames can legitimately help resolve an occluded joint that becomes visib
 
 ---
 
-## 16. Dataset sampling and split rules
+## 17. Dataset sampling and split rules
 
 The Experiment 001 corpus should be enriched for the known failure conditions rather than uniformly sampled.
 
@@ -573,9 +795,17 @@ into both development and held-out evaluation.
 
 Prefer grouped separation where metadata allows.
 
+### Orientation-diagnostic sampling
+
+O0b should be drawn from clearly successful baseline crops, not cherry-picked difficult examples.
+
+O1a/O1b should be drawn from predeclared critical-window cases after localization control.
+
+This prevents the orientation hypothesis from being tested only on examples selected because canonicalization appears promising.
+
 ---
 
-## 17. Ground-truth uncertainty
+## 18. Ground-truth uncertainty
 
 For each manually or externally annotated joint, distinguish as far as possible:
 
@@ -589,15 +819,24 @@ unknown
 
 Also retain an annotation-confidence field.
 
+For oracle canonicalization additionally record:
+
+```text
+orientation_angle
+orientation_confidence
+orientation_ambiguous  # yes / no
+orientation_definition
+```
+
 A fully occluded joint inferred from biomechanics is not equivalent to a directly visible joint.
 
 ---
 
-## 18. Primary reporting table
+## 19. Primary reporting table
 
 Freeze the general structure before result inspection.
 
-Suggested rows:
+Suggested diagnostic rows:
 
 ```text
 B0a whole-frame
@@ -607,10 +846,20 @@ B0d background-only
 B0e tracked crop
 T0  tracker only
 G0  global state
-B1  + temporal reconstruction
-B2  + biomechanics
-B3  + phase prior
-B4  + flight physics
+O0a known-good original
+O0b known-good rotated
+O1a difficult original
+O1b difficult oracle-canonicalized
+O1c estimated canonicalization
+```
+
+Suggested reconstruction rows:
+
+```text
+B1 + temporal reconstruction
+B2 + biomechanics
+B3 + phase prior
+B4 + flight physics
 ```
 
 Suggested result groups:
@@ -620,6 +869,7 @@ all evaluable frames
 take-off critical
 flight critical
 opening / entry critical
+rotation-angle groups
 ```
 
 Suggested failure columns:
@@ -629,6 +879,7 @@ F0 detection failure
 F1 target loss
 F2 articulation collapse
 F3 structured wrong pose
+F4 orientation-sensitive mechanism
 background hallucination
 recovery before entry
 ```
@@ -637,11 +888,11 @@ Pose-error columns are added where suitable ground truth exists.
 
 ---
 
-## 19. Interpretation rules
+## 20. Interpretation rules
 
 Do not claim that a later stage "solves pose estimation" merely because average error improves.
 
-A useful result must identify **which failure class changed**.
+A useful result must identify **which failure mechanism changed**.
 
 Examples:
 
@@ -658,15 +909,33 @@ B0d hallucinates high-confidence poses
 T0 succeeds while B0e pose fails
 → tracking and articulation should be decoupled
 
-B1 improves F2 after B0e
-→ temporal pose reconstruction adds value beyond target retention
+O0b degrades strongly with angle
+→ baseline lacks useful rotational equivariance
+
+O1b substantially improves O1a
+→ orientation canonicalization is a justified component to investigate further
+
+O0b degrades but O1b does not improve difficult poses
+→ orientation sensitivity exists but is not the dominant diving-pose failure
+
+B1 improves F2 after B0e / O1 controls
+→ temporal pose reconstruction adds value beyond target retention and orientation normalization
 ```
 
 ---
 
-## 20. Versioning and deviations
+## 21. Versioning and deviations
 
-This document is **v0.1**.
+This document is **v0.2**.
+
+Changes from v0.1:
+
+- added image-space rotation-equivariance diagnostic,
+- added oracle orientation canonicalization,
+- explicitly separated coordinate rotation from pixel-space canonicalization,
+- added conditional estimated-orientation stage,
+- added orientation-sensitive failure mechanism label F4,
+- extended reporting and ground-truth fields for orientation analysis.
 
 After real dataset access:
 
