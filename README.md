@@ -19,11 +19,12 @@ General-purpose human pose estimators often work well while a diver remains in r
 
 Preliminary tests suggest that the failure can be **catastrophic rather than merely noisy**. Once the diver enters highly inverted or compact configurations, a conventional pose pipeline may lose the athlete as a coherent target, place joints on unrelated background structures, or retain only the approximate flight path while the articulated pose degenerates into unstable joint-position noise.
 
-The project therefore separates three questions that are often conflated:
+The project therefore separates four questions that are often conflated:
 
 1. **Athlete retention:** does the system still know where the same diver is?
 2. **Global body state:** can it retain the diver's approximate location, extent and orientation?
-3. **Articulated pose:** can it estimate a coherent body configuration once localization is controlled?
+3. **Orientation robustness:** does the pose model fail because the same human configuration appears at an unusual image-plane orientation?
+4. **Articulated pose:** can it estimate a coherent body configuration once localization and orientation effects are controlled?
 
 ## Core hypothesis
 
@@ -35,6 +36,8 @@ camera / shot state
 athlete retention
         ↓
 global body state
+        ↓
+orientation robustness / canonicalization
         ↓
 articulated pose
         ↓
@@ -55,17 +58,19 @@ The current study asks, among other things:
 
 1. Does failure begin with person/target retention, or only after the athlete has already been correctly localized?
 2. Can oracle crops, foreground masks and background-only controls separate target-loss failures from articulated-pose failures?
-3. Can temporal tracking retain the athlete through the failure interval without solving pose?
-4. Once localization is controlled, can temporal reconstruction recover a coherent articulated pose?
-5. How much do projection-aware body geometry and joint constraints help?
-6. Does diving-phase information reduce the remaining ambiguity?
-7. Can lightweight flight physics improve airborne trajectory and orientation reconstruction once camera motion is accounted for?
+3. Is the pose model approximately rotation-equivariant, or does a normally recognizable human become difficult simply when the image is rotated away from an upright orientation?
+4. If a difficult diving crop is given an oracle orientation and rotated into a canonical image-plane orientation, does pose estimation improve?
+5. Can temporal tracking retain the athlete through the failure interval without solving pose?
+6. Once localization and orientation effects are controlled, can temporal reconstruction recover a coherent articulated pose?
+7. How much do projection-aware body geometry and joint constraints help?
+8. Does diving-phase information reduce the remaining ambiguity?
+9. Can lightweight flight physics improve airborne trajectory and orientation reconstruction once camera motion is accounted for?
 
 See [`docs/research_questions.md`](docs/research_questions.md) for the current research-question set.
 
 ## Experiment 001
 
-The first experiment is designed as a low-cost falsification and localization test before any large synthetic-data system is built.
+The first experiment is designed as a low-cost falsification and failure-localization test before any large synthetic-data system is built.
 
 The diagnostic baseline begins with the **same pose model under controlled changes to its input**:
 
@@ -75,6 +80,18 @@ B0b  oracle athlete bounding box + same pose model
 B0c  oracle foreground mask + same pose model
 B0d  background-only negative control
 B0e  temporally propagated / tracked athlete crop + same pose model
+T0   tracker-only baseline
+G0   global-state / silhouette baseline
+```
+
+A separate orientation diagnostic tests whether image-plane orientation itself causes failure:
+
+```text
+O0a  known-good athlete crop, original orientation
+O0b  same known-good crop under synthetic rotations
+O1a  difficult diving crop, original orientation
+O1b  same difficult crop with oracle canonicalization
+O1c  estimated-orientation canonicalization
 ```
 
 Only after the failure source has been localized does the reconstruction ablation proceed:
@@ -145,6 +162,7 @@ The project will aim to document:
 - camera / shot state,
 - critical-frame definitions,
 - diagnostic controls,
+- orientation-normalization controls,
 - experiment configurations,
 - ablations,
 - failure cases,
@@ -158,6 +176,8 @@ Restricted data will remain outside the public repository.
 The project does **not** assume that observed 2D limb lengths remain constant. A fixed 3D body segment can project to very different 2D lengths as the diver rotates relative to the camera, and broadcast footage may contain pan, tilt and zoom.
 
 Strong body-geometry constraints must therefore be **projection-aware** rather than treating image-plane segment length as a physical invariant.
+
+Likewise, rotating predicted keypoints after inference is not equivalent to rotating the athlete pixels before inference. The orientation diagnostic explicitly tests the latter.
 
 ## License
 
