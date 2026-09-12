@@ -2,7 +2,7 @@
 
 **Independent, non-commercial computer-vision research on robust human pose reconstruction in competitive diving.**
 
-**Status:** Early-stage research — dataset acquisition, baseline design, and critical-failure mapping.
+**Status:** Early-stage research — dataset acquisition and pre-data baseline-protocol freeze.
 
 ## Motivation
 
@@ -17,51 +17,81 @@ General-purpose human pose estimators often work well while a diver remains in r
 - rapid opening,
 - and near-vertical water entry.
 
-The central research question is whether these failure cases can be improved by treating pose estimation as a **sequence reconstruction problem** rather than an independent frame-by-frame detection problem.
+Preliminary tests suggest that the failure can be **catastrophic rather than merely noisy**. Once the diver enters highly inverted or compact configurations, a conventional pose pipeline may lose the athlete as a coherent target, place joints on unrelated background structures, or retain only the approximate flight path while the articulated pose degenerates into unstable joint-position noise.
+
+The project therefore separates three questions that are often conflated:
+
+1. **Athlete retention:** does the system still know where the same diver is?
+2. **Global body state:** can it retain the diver's approximate location, extent and orientation?
+3. **Articulated pose:** can it estimate a coherent body configuration once localization is controlled?
 
 ## Core hypothesis
 
-The project will test the following progression:
+The project will test a hierarchical reconstruction strategy:
 
 ```text
-frame-wise pose estimation
+camera / shot state
         ↓
-+ temporal continuity
+athlete retention
         ↓
-+ fixed body geometry / biomechanical constraints
+global body state
         ↓
-+ diving-phase priors
+articulated pose
         ↓
-+ lightweight flight physics
+temporal reconstruction
+        ↓
+projection-aware biomechanical constraints
+        ↓
+diving-phase priors
+        ↓
+lightweight flight physics
 ```
 
-The first goal is not to build a complete diving-analysis product. It is to determine which additional constraints materially improve pose reconstruction specifically in the frames where ordinary pose estimators fail.
+The first goal is not to build a complete diving-analysis product. It is to determine **where the baseline pipeline actually fails** and which additional constraints materially improve reconstruction specifically in the critical frames where ordinary pose estimators become unreliable.
 
 ## Initial research questions
 
-1. Where and how do current pose estimators fail during competitive diving?
-2. Can temporal continuity reconstruct poses during short periods of severe occlusion, inversion, or blur?
-3. How much additional improvement comes from constant bone lengths and joint-range constraints?
-4. Does diving-phase information reduce ambiguity further?
-5. Can lightweight flight physics improve orientation and trajectory reconstruction during airborne phases?
+The current study asks, among other things:
+
+1. Does failure begin with person/target retention, or only after the athlete has already been correctly localized?
+2. Can oracle crops, foreground masks and background-only controls separate target-loss failures from articulated-pose failures?
+3. Can temporal tracking retain the athlete through the failure interval without solving pose?
+4. Once localization is controlled, can temporal reconstruction recover a coherent articulated pose?
+5. How much do projection-aware body geometry and joint constraints help?
+6. Does diving-phase information reduce the remaining ambiguity?
+7. Can lightweight flight physics improve airborne trajectory and orientation reconstruction once camera motion is accounted for?
 
 See [`docs/research_questions.md`](docs/research_questions.md) for the current research-question set.
 
 ## Experiment 001
 
-The first experiment is designed as a low-cost falsification test before any large synthetic-data system is built.
+The first experiment is designed as a low-cost falsification and localization test before any large synthetic-data system is built.
 
-Planned ablation:
+The diagnostic baseline begins with the **same pose model under controlled changes to its input**:
 
-1. frame-wise baseline,
-2. + temporal reconstruction,
-3. + body-geometry constraints,
-4. + joint and diving-phase priors,
-5. + flight-physics constraints.
+```text
+B0a  whole-frame detector + pose
+B0b  oracle athlete bounding box + same pose model
+B0c  oracle foreground mask + same pose model
+B0d  background-only negative control
+B0e  temporally propagated / tracked athlete crop + same pose model
+```
+
+Only after the failure source has been localized does the reconstruction ablation proceed:
+
+```text
+B1  + pose temporal reconstruction
+B2  + projection-aware body geometry / biomechanical constraints
+B3  + joint and diving-phase priors
+B4  + camera-aware lightweight flight physics
+```
 
 Evaluation will focus on **critical failure windows**, not only whole-video average pose accuracy.
 
-See [`docs/experiment_001.md`](docs/experiment_001.md).
+See:
+
+- [`docs/experiment_001.md`](docs/experiment_001.md)
+- [`docs/baseline_protocol.md`](docs/baseline_protocol.md)
 
 ## Data policy
 
@@ -78,7 +108,7 @@ Third-party datasets must be obtained directly from their original maintainers u
 
 See [`docs/dataset_and_provenance_policy.md`](docs/dataset_and_provenance_policy.md).
 
-## Planned repository structure
+## Repository structure
 
 ```text
 .
@@ -86,15 +116,17 @@ See [`docs/dataset_and_provenance_policy.md`](docs/dataset_and_provenance_policy
 ├── LICENSE
 ├── CITATION.cff
 ├── .gitignore
-├── configs/
-├── data/
-├── docs/
-├── notebooks/
-├── results/
-└── src/
+└── docs/
+    ├── baseline_protocol.md
+    ├── data_sources.md
+    ├── dataset_and_provenance_policy.md
+    ├── experiment_001.md
+    ├── project_status.md
+    ├── research_plan.md
+    └── research_questions.md
 ```
 
-The structure is intentionally small at this stage. Directories will grow only when experiments require them.
+The structure is intentionally small at this stage. Additional directories will be added only when real code, configurations, notebooks or results require them.
 
 ## Research independence
 
@@ -109,14 +141,23 @@ The project will aim to document:
 - dataset provenance and access conditions,
 - model and checkpoint provenance,
 - preprocessing,
-- evaluation splits,
+- source-grouped evaluation splits,
+- camera / shot state,
 - critical-frame definitions,
+- diagnostic controls,
 - experiment configurations,
 - ablations,
 - failure cases,
+- recovery behavior,
 - and negative results.
 
 Restricted data will remain outside the public repository.
+
+## Important geometric note
+
+The project does **not** assume that observed 2D limb lengths remain constant. A fixed 3D body segment can project to very different 2D lengths as the diver rotates relative to the camera, and broadcast footage may contain pan, tilt and zoom.
+
+Strong body-geometry constraints must therefore be **projection-aware** rather than treating image-plane segment length as a physical invariant.
 
 ## License
 
