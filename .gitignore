@@ -1,0 +1,92 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.ipynb_checkpoints/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Secrets / local settings
+.env
+.env.*
+*.key
+*.pem
+credentials.*
+secrets.*
+
+# Restricted / local research data
+data/external/
+data/interim/
+data/derived/
+datasets/
+private_data/
+restricted_data/
+agreements/
+private/
+
+# Video / image assets: keep local unless explicitly cleared for redistribution
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.m4v
+
+# Large model checkpoints / training artifacts
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.safetensors
+checkpoints/
+runs/
+wandb/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.log
+
+# Future frontend / site tooling, if added
+node_modules/
+.next/
+.nuxt/
+dist-site/
+site-build/
