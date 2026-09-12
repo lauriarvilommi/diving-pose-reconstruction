@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use this research project or its code, please cite the repository."
+title: "Diving Pose Reconstruction"
+type: software
+authors:
+  - family-names: "Arvilommi"
+    given-names: "Lauri"
+repository-code: "https://github.com/lauriarvilommi/diving-pose-reconstruction"
+url: "https://github.com/lauriarvilommi/diving-pose-reconstruction"
+license: MIT
+version: 0.0.1
+date-released: 2026-09-12
+abstract: >-
+  Independent non-commercial research on robust human pose reconstruction in
+  competitive diving using temporal continuity, biomechanical constraints,
+  diving-phase priors, and lightweight flight physics.
+keywords:
+  - computer vision
+  - human pose estimation
+  - human pose reconstruction
+  - diving
+  - sports biomechanics
+  - temporal modeling
